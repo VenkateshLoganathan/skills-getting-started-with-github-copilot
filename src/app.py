@@ -8,6 +8,7 @@ for extracurricular activities at Mergington High School.
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse
 import os
 from pathlib import Path
 
@@ -85,7 +86,14 @@ def root():
 
 @app.get("/activities")
 def get_activities():
-    return activities
+    return JSONResponse(content=activities, headers={"Cache-Control": "no-store"})
+
+
+def get_activity_or_404(activity_name: str):
+    if activity_name not in activities:
+        raise HTTPException(status_code=404, detail="Activity not found")
+    return activities[activity_name]
+
 
 # Validate student is not already signed up
 def validate_student_not_signed_up(activity, email):
@@ -95,12 +103,8 @@ def validate_student_not_signed_up(activity, email):
 @app.post("/activities/{activity_name}/signup")
 def signup_for_activity(activity_name: str, email: str):
     """Sign up a student for an activity"""
-    # Validate activity exists
-    if activity_name not in activities:
-        raise HTTPException(status_code=404, detail="Activity not found")
-
     # Get the specific activity
-    activity = activities[activity_name]
+    activity = get_activity_or_404(activity_name)
 
     # Validate student is not already signed up and activity is not full
     if len(activity["participants"]) >= activity["max_participants"]:
@@ -110,3 +114,15 @@ def signup_for_activity(activity_name: str, email: str):
     # Add student
     activity["participants"].append(email)
     return {"message": f"Signed up {email} for {activity_name}"}
+
+
+@app.delete("/activities/{activity_name}/participants")
+def unregister_participant(activity_name: str, email: str):
+    """Remove a student from an activity"""
+    activity = get_activity_or_404(activity_name)
+
+    if email not in activity["participants"]:
+        raise HTTPException(status_code=404, detail="Participant not found for this activity")
+
+    activity["participants"].remove(email)
+    return {"message": f"Removed {email} from {activity_name}"}
